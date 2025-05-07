@@ -9,6 +9,7 @@ from data.options import option
 from tqdm import tqdm
 from torchvision.transforms.functional import resize, pad, to_tensor
 from glob import glob
+import time
 
 opt = option().parse_args()
 
@@ -69,10 +70,16 @@ if __name__ == '__main__':
         input_img = input_img.cuda()
         input_img, (pad_h, pad_w) = resize_or_pad(input_img)
 
+        start_time = time.time()
+        total_time = 0
         with torch.no_grad():
             output_img = model(input_img)
             output_img = output_img[:, :, :output_img.shape[2]-pad_h, :output_img.shape[3]-pad_w]
+        elapsed_time = time.time() - start_time
+        total_time += elapsed_time
 
+        print(f"[INFO] Sample {idx}: Inference time = {elapsed_time:.4f} seconds")
+        
         input_pil = to_pil(input_img.squeeze(0).cpu().clamp(0, 1)[:, :input_img.shape[2]-pad_h, :input_img.shape[3]-pad_w])
         # gt_img = gt_img.cuda() if isinstance(gt_img, torch.Tensor) else gt_img[0].cuda()
         if isinstance(gt_img, (tuple, list)):
@@ -140,3 +147,4 @@ if __name__ == '__main__':
         image.save(os.path.join(output_dir, filename))
     
     print(f"[INFO] 標註完成，共處理 {len(img_paths)} 張圖，輸出至 {output_dir}")
+    print(f"[SUMMARY] Average inference time: {total_time / len(test_loader):.4f} seconds")
