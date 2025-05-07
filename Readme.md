@@ -502,3 +502,6 @@ If you find our work useful for your research, please cite our paper
 }
 ```
 
+# Write by Atypical281795：
+環境安裝+主要修改程式紀錄
+https://hackmd.io/sFv-X3BVRqClJjmzhw0dHw
