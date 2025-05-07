@@ -15,8 +15,11 @@ from loss.losses import *
 from data.scheduler import *
 from tqdm import tqdm
 from datetime import datetime
+import json
+import matplotlib.pyplot as plt
 
 opt = option().parse_args()
+os.makedirs("./results/training", exist_ok=True)
 
 def seed_torch():
     seed = random.randint(1, 1000000)
@@ -101,7 +104,7 @@ def checkpoint(epoch):
     
 def load_datasets():
     print('===> Loading datasets')
-    if opt.lol_v1 or opt.lol_blur or opt.lolv2_real or opt.lolv2_syn or opt.SID or opt.SICE_mix or opt.SICE_grad:
+    if opt.lol_v1 or opt.lol_blur or opt.lolv2_real or opt.lolv2_syn or opt.SID or opt.SICE_mix or opt.SICE_grad or opt.CEC:
         if opt.lol_v1:
             train_set = get_lol_training_set(opt.data_train_lol_v1,size=opt.cropSize)
             training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=opt.shuffle)
@@ -143,6 +146,13 @@ def load_datasets():
             training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=opt.shuffle)
             test_set = get_SICE_eval_set(opt.data_val_SICE_grad)
             testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads, batch_size=1, shuffle=False)
+
+        if opt.CEC:
+            train_set = get_CEC_training_set(opt.data_train_CEC, size=opt.cropSize)
+            training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=opt.shuffle)
+            test_set = get_eval_set(opt.data_val_CEC)
+            testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads, batch_size=1, shuffle=False)
+
     else:
         raise Exception("should choose a dataset")
     return training_data_loader, testing_data_loader
@@ -199,18 +209,35 @@ if __name__ == '__main__':
     '''
     train
     '''
+    epoch_losses = []
     psnr = []
     ssim = []
     lpips = []
-    start_epoch=0
-    if opt.start_epoch > 0:
-        start_epoch = opt.start_epoch
+    
+    start_epoch = opt.start_epoch if opt.start_epoch > 0 else 0
+    
     if not os.path.exists(opt.val_folder):          
         os.mkdir(opt.val_folder) 
-        
-    for epoch in range(start_epoch+1, opt.nEpochs + start_epoch + 1):
+    
+    for epoch in range(start_epoch + 1, opt.nEpochs + start_epoch + 1):
         epoch_loss, pic_num = train(epoch)
         scheduler.step()
+    
+        avg_loss = epoch_loss / pic_num
+        epoch_losses.append(avg_loss)
+    
+    # psnr = []
+    # ssim = []
+    # lpips = []
+    # start_epoch=0
+    # if opt.start_epoch > 0:
+    #     start_epoch = opt.start_epoch
+    # if not os.path.exists(opt.val_folder):          
+    #     os.mkdir(opt.val_folder) 
+        
+    # for epoch in range(start_epoch+1, opt.nEpochs + start_epoch + 1):
+    #     epoch_loss, pic_num = train(epoch)
+    #     scheduler.step()
         
         if epoch % opt.snapshots == 0:
             model_out_path = checkpoint(epoch) 
@@ -244,8 +271,20 @@ if __name__ == '__main__':
                 output_folder = 'SICE_grad/'
                 label_dir = opt.data_valgt_SICE_grad
                 norm_size = False
+            if opt.CEC:
+                output_folder = 'CEC/'
+                label_dir = opt.data_valgt_CEC
+                norm_size = True
 
             im_dir = opt.val_folder + output_folder + '*.png'
+
+            #Quick Check
+            print(f"[DEBUG] norm_size={norm_size}")
+            for batch in testing_data_loader:
+                print(f"[DEBUG] batch len = {len(batch)}")
+                break
+
+
             eval(model, testing_data_loader, model_out_path, opt.val_folder+output_folder, 
                  norm_size=norm_size, LOL=opt.lol_v1, v2=opt.lolv2_real, alpha=0.8)
             
@@ -276,4 +315,33 @@ if __name__ == '__main__':
         f.write("|----------------------|----------------------|----------------------|----------------------|\n")  
         for i in range(len(psnr)):
             f.write(f"| {opt.start_epoch+(i+1)*opt.snapshots} | { psnr[i]:.4f} | {ssim[i]:.4f} | {lpips[i]:.4f} |\n")  
+
+
+        plt.figure()
+        plt.plot(range(start_epoch + 1, opt.nEpochs + start_epoch + 1), epoch_losses, marker='o', label='Train Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Training Loss per Epoch')
+        plt.grid(True)
+        plt.legend()
         
+        # 儲存圖表
+        loss_plot_path = f"./results/training/loss_curve_{now}.png"
+        plt.savefig(loss_plot_path)
+        print(f"Loss curve saved to {loss_plot_path}")
+
+
+        # PSNR / SSIM / LPIPS 曲線
+        plt.figure()
+        plt.plot(range(opt.snapshots, opt.nEpochs + 1, opt.snapshots), psnr, label='PSNR')
+        plt.plot(range(opt.snapshots, opt.nEpochs + 1, opt.snapshots), ssim, label='SSIM')
+        plt.plot(range(opt.snapshots, opt.nEpochs + 1, opt.snapshots), lpips, label='LPIPS')
+        plt.xlabel('Epoch')
+        plt.ylabel('Metric Value')
+        plt.title('Evaluation Metrics per Snapshot')
+        plt.legend()
+        plt.grid(True)
+        
+        metric_plot_path = f"./results/training/metrics_curve_{now}.png"
+        plt.savefig(metric_plot_path)
+        print(f"Metrics curve saved to {metric_plot_path}")
