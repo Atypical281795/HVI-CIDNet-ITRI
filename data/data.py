@@ -42,5 +42,11 @@ def get_SICE_training_set(data_dir,size):
 def get_SICE_eval_set(data_dir):
     return SICEDatasetFromFolderEval(data_dir, transform=transform2())
 
+def get_CEC_training_set(data_dir, size):
+    return CECDatasetFromFolder(data_dir, transform=transform1(size))
+    
+def get_CEC_eval_set(data_dir):
+    return CECDatasetFromFolder(data_dir, transform=transform2())
+
 def get_eval_set(data_dir):
     return DatasetFromFolderEval(data_dir, transform=transform2())
