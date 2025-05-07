@@ -32,8 +32,15 @@ eval_parser.add_argument('--alpha', type=float, default=1.0)
 eval_parser.add_argument('--gamma', type=float, default=1.0)
 eval_parser.add_argument('--unpaired_weights', type=str, default='./weights/LOLv2_syn/w_perc.pth')
 
-ep = eval_parser.parse_args()
+# ep = eval_parser.parse_args()
 
+def pad_to_multiple(img, multiple=16):
+    _, _, h, w = img.shape
+    new_h = (h + multiple - 1) // multiple * multiple
+    new_w = (w + multiple - 1) // multiple * multiple
+    pad_h = new_h - h
+    pad_w = new_w - w
+    return F.pad(img, (0, pad_w, 0, pad_h))  # pad (left, right, top, bottom)
 
 def eval(model, testing_data_loader, model_path, output_folder,norm_size=True,LOL=False,v2=False,unpaired=False,alpha=1.0,gamma=1.0):
     torch.set_grad_enabled(False)
@@ -56,7 +63,7 @@ def eval(model, testing_data_loader, model_path, output_folder,norm_size=True,LO
             else:
                 input, name, h, w = batch[0], batch[1], batch[2], batch[3]
             
-            input = input.cuda()
+            input = pad_to_multiple(input, 16).cuda()
             output = model(input**gamma) 
             
         if not os.path.exists(output_folder):          
@@ -77,6 +84,7 @@ def eval(model, testing_data_loader, model_path, output_folder,norm_size=True,LO
     torch.set_grad_enabled(True)
     
 if __name__ == '__main__':
+    ep = eval_parser.parse_args()
     
     cuda = True
     if cuda and not torch.cuda.is_available():
